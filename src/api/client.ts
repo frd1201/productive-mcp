@@ -133,32 +133,35 @@ export class ProductiveAPIClient {
     page?: number;
   }): Promise<ProductiveResponse<ProductiveTask>> {
     const queryParams = new URLSearchParams();
-    
+
+    // Include assignee data so we can resolve names
+    queryParams.append('include', 'assignee');
+
     if (params?.project_id) {
       queryParams.append('filter[project_id]', params.project_id);
     }
-    
+
     if (params?.assignee_id) {
       queryParams.append('filter[assignee_id]', params.assignee_id);
     }
-    
+
     if (params?.status) {
       // Convert status names to integers: open = 1, closed = 2
       const statusValue = params.status === 'open' ? '1' : '2';
       queryParams.append('filter[status]', statusValue);
     }
-    
+
     if (params?.limit) {
       queryParams.append('page[size]', params.limit.toString());
     }
-    
+
     if (params?.page) {
       queryParams.append('page[number]', params.page.toString());
     }
-    
+
     const queryString = queryParams.toString();
     const path = `tasks${queryString ? `?${queryString}` : ''}`;
-    
+
     return this.makeRequest<ProductiveResponse<ProductiveTask>>(path);
   }
   

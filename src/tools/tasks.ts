@@ -1,7 +1,16 @@
 import { z } from 'zod';
 import { ProductiveAPIClient } from '../api/client.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import { ProductiveTaskUpdate } from '../api/types.js';
+import { ProductiveTaskUpdate, ProductiveIncludedResource } from '../api/types.js';
+
+function resolvePersonName(personId: string | undefined, included?: ProductiveIncludedResource[]): string | undefined {
+  if (!personId || !included) return undefined;
+  const person = included.find(item => item.type === 'people' && item.id === personId);
+  if (!person) return undefined;
+  const first = person.attributes.first_name || '';
+  const last = person.attributes.last_name || '';
+  return `${first} ${last}`.trim() || undefined;
+}
 
 const listTasksSchema = z.object({
   project_id: z.string().optional(),
@@ -45,15 +54,19 @@ export async function listTasksTool(
     const tasksText = response.data.filter(task => task && task.attributes).map(task => {
       const projectId = task.relationships?.project?.data?.id;
       const assigneeId = task.relationships?.assignee?.data?.id;
+      const assigneeName = resolvePersonName(assigneeId, response.included);
       const statusText = task.attributes.status === 1 ? 'open' : task.attributes.status === 2 ? 'closed' : `status ${task.attributes.status}`;
+      const assigneeDisplay = assigneeName
+        ? `Assignee: ${assigneeName} (ID: ${assigneeId})`
+        : assigneeId ? `Assignee ID: ${assigneeId}` : 'Unassigned';
       return `• ${task.attributes.title} (ID: ${task.id})
   Status: ${statusText}
   ${task.attributes.due_date ? `Due: ${task.attributes.due_date}` : 'No due date'}
   ${projectId ? `Project ID: ${projectId}` : ''}
-  ${assigneeId ? `Assignee ID: ${assigneeId}` : 'Unassigned'}
+  ${assigneeDisplay}
   ${task.attributes.description ? `Description: ${task.attributes.description}` : ''}`;
     }).join('\n\n');
-    
+
     const summary = `Found ${response.data.length} task${response.data.length !== 1 ? 's' : ''}${response.meta?.total_count ? ` (showing ${response.data.length} of ${response.meta.total_count})` : ''}:\n\n${tasksText}`;
     
     return {
@@ -101,14 +114,18 @@ export async function getProjectTasksTool(
     
     const tasksText = response.data.filter(task => task && task.attributes).map(task => {
       const assigneeId = task.relationships?.assignee?.data?.id;
+      const assigneeName = resolvePersonName(assigneeId, response.included);
       const statusText = task.attributes.status === 1 ? 'open' : task.attributes.status === 2 ? 'closed' : `status ${task.attributes.status}`;
+      const assigneeDisplay = assigneeName
+        ? `Assignee: ${assigneeName} (ID: ${assigneeId})`
+        : assigneeId ? `Assignee ID: ${assigneeId}` : 'Unassigned';
       return `• ${task.attributes.title} (ID: ${task.id})
   Status: ${statusText}
   ${task.attributes.due_date ? `Due: ${task.attributes.due_date}` : 'No due date'}
-  ${assigneeId ? `Assignee ID: ${assigneeId}` : 'Unassigned'}
+  ${assigneeDisplay}
   ${task.attributes.description ? `Description: ${task.attributes.description}` : ''}`;
     }).join('\n\n');
-    
+
     const summary = `Project ${params.project_id} has ${response.data.length} task${response.data.length !== 1 ? 's' : ''}:\n\n${tasksText}`;
     
     return {
@@ -143,7 +160,7 @@ export async function getTaskTool(
     const config = await import('../config/index.js').then(m => m.getConfig());
     
     // Create URL with task_list included
-    const url = `${config.PRODUCTIVE_API_BASE_URL}tasks/${params.task_id}?include=task_list`;
+    const url = `${config.PRODUCTIVE_API_BASE_URL}tasks/${params.task_id}?include=task_list,assignee`;
     
     // Create request with proper headers from config
     const response = await fetch(url, {
@@ -188,7 +205,12 @@ export async function getTaskTool(
     }
     
     if (assigneeId) {
-      text += `Assignee ID: ${assigneeId}\n`;
+      const assigneeName = resolvePersonName(assigneeId, data.included);
+      if (assigneeName) {
+        text += `Assignee: ${assigneeName} (ID: ${assigneeId})\n`;
+      } else {
+        text += `Assignee ID: ${assigneeId}\n`;
+      }
     } else {
       text += `Assignee: Unassigned\n`;
     }
@@ -334,6 +356,7 @@ export const getTaskDefinition = {
 const createTaskSchema = z.object({
   title: z.string().min(1, 'Task title is required'),
   description: z.string().optional(),
+  description_html: z.string().optional(),
   project_id: z.string().optional(),
   board_id: z.string().optional(),
   task_list_id: z.string().optional(),
@@ -362,12 +385,15 @@ export async function createTaskTool(
       assigneeId = config.PRODUCTIVE_USER_ID;
     }
     
+    // Use description_html if provided, otherwise fall back to description
+    const descriptionValue = params.description_html || params.description;
+
     const taskData = {
       data: {
         type: 'tasks' as const,
         attributes: {
           title: params.title,
-          description: params.description,
+          description: descriptionValue,
           due_date: params.due_date,
           status: params.status === 'open' ? 1 : 2,
         },
@@ -476,7 +502,11 @@ export const createTaskDefinition = {
       },
       description: {
         type: 'string',
-        description: 'Task description',
+        description: 'Task description (plain text)',
+      },
+      description_html: {
+        type: 'string',
+        description: 'Task description with HTML formatting. Supports tags like <h2>, <p>, <ul>, <li>, <strong>, <em>, <a href="">. Takes precedence over description if both provided.',
       },
       project_id: {
         type: 'string',
@@ -612,6 +642,7 @@ const updateTaskDetailsSchema = z.object({
   task_id: z.string().min(1, 'Task ID is required'),
   title: z.string().min(1, 'Task title cannot be empty').optional(),
   description: z.string().optional(),
+  description_html: z.string().optional(),
 });
 
 export async function updateTaskDetailsTool(
@@ -622,13 +653,13 @@ export async function updateTaskDetailsTool(
     const params = updateTaskDetailsSchema.parse(args);
     
     // Ensure at least one field is being updated
-    if (!params.title && params.description === undefined) {
+    if (!params.title && params.description === undefined && params.description_html === undefined) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        'At least one field (title or description) must be provided for update'
+        'At least one field (title, description, or description_html) must be provided for update'
       );
     }
-    
+
     const taskUpdate: ProductiveTaskUpdate = {
       data: {
         type: 'tasks',
@@ -636,13 +667,16 @@ export async function updateTaskDetailsTool(
         attributes: {}
       }
     };
-    
+
     // Only include fields that are being updated
     if (params.title) {
       taskUpdate.data.attributes!.title = params.title;
     }
-    
-    if (params.description !== undefined) {
+
+    // Use description_html if provided, otherwise fall back to description
+    if (params.description_html !== undefined) {
+      taskUpdate.data.attributes!.description = params.description_html;
+    } else if (params.description !== undefined) {
       taskUpdate.data.attributes!.description = params.description;
     }
     
@@ -655,9 +689,12 @@ export async function updateTaskDetailsTool(
       text += `✓ Title updated to: "${response.data.attributes.title}"\n`;
     }
     
-    if (params.description !== undefined) {
+    if (params.description_html !== undefined || params.description !== undefined) {
       if (response.data.attributes.description) {
-        text += `✓ Description updated to: "${response.data.attributes.description}"\n`;
+        const truncated = response.data.attributes.description.length > 100
+          ? response.data.attributes.description.substring(0, 100) + '...'
+          : response.data.attributes.description;
+        text += `✓ Description updated${params.description_html ? ' (HTML)' : ''}: "${truncated}"\n`;
       } else {
         text += `✓ Description cleared\n`;
       }
@@ -704,7 +741,11 @@ export const updateTaskDetailsDefinition = {
       },
       description: {
         type: 'string',
-        description: 'New description for the task (optional, use empty string to clear description)',
+        description: 'New description for the task in plain text (optional, use empty string to clear description)',
+      },
+      description_html: {
+        type: 'string',
+        description: 'New description with HTML formatting. Supports tags like <h2>, <p>, <ul>, <li>, <strong>, <em>, <a href="">. Takes precedence over description if both provided.',
       },
     },
     required: ['task_id'],

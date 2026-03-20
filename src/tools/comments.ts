@@ -64,7 +64,7 @@ export async function addTaskCommentTool(
 
 export const addTaskCommentDefinition = {
   name: 'add_task_comment',
-  description: 'Add a comment to a task in Productive.io',
+  description: 'Add a comment to a task in Productive.io. Supports HTML formatting.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -74,7 +74,7 @@ export const addTaskCommentDefinition = {
       },
       comment: {
         type: 'string',
-        description: 'Text content of the comment (required)',
+        description: 'Comment content (required). Supports HTML formatting with tags like <div>, <p>, <strong>, <em>, <ul>, <li>, <a href="">.',
       },
     },
     required: ['task_id', 'comment'],

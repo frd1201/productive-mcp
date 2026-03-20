@@ -71,8 +71,16 @@ export interface ProductiveTask {
   };
 }
 
+export interface ProductiveIncludedResource {
+  id: string;
+  type: string;
+  attributes: Record<string, any>;
+  relationships?: Record<string, any>;
+}
+
 export interface ProductiveResponse<T> {
   data: T[];
+  included?: ProductiveIncludedResource[];
   links?: {
     first?: string;
     last?: string;
