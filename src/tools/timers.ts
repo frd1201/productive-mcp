@@ -13,7 +13,6 @@ const getTimerSchema = z.object({
 });
 
 const startTimerSchema = z.object({
-  service_name: z.string().optional(),
   service_id: z.string().optional(),
   time_entry_id: z.string().optional(),
   note: z.string().min(5, 'Work description must be at least 5 characters'),
@@ -47,29 +46,6 @@ function formatTimerResponse(
   }
 
   return { content: [{ type: 'text', text }] };
-}
-
-function matchServices(
-  services: Array<{ id: string; attributes: { name: string; [key: string]: unknown } }>,
-  searchName: string,
-): Array<{ id: string; attributes: { name: string; [key: string]: unknown } }> {
-  const lower = searchName.toLowerCase();
-
-  // Exact match first
-  const exact = services.filter(s => s.attributes.name.toLowerCase() === lower);
-  if (exact.length > 0) return exact;
-
-  // Contains match
-  const contains = services.filter(s => s.attributes.name.toLowerCase().includes(lower));
-  if (contains.length > 0) return contains;
-
-  // Word-based match: check if any word from the search appears in the service name
-  const searchWords = lower.split(/\s+/);
-  const wordMatch = services.filter(s => {
-    const name = s.attributes.name.toLowerCase();
-    return searchWords.some(word => word.length > 2 && name.includes(word));
-  });
-  return wordMatch;
 }
 
 function formatServicesList(
@@ -114,7 +90,7 @@ export async function startTimerTool(
 
     let resolvedServiceId = params.service_id;
 
-    // If no service_id and no time_entry_id, resolve via service_name or show list
+    // If no service_id and no time_entry_id, show available services
     if (!resolvedServiceId && !params.time_entry_id) {
       const services = await client.listServices({ budget_status: 1, limit: 200 });
 
@@ -124,39 +100,12 @@ export async function startTimerTool(
         };
       }
 
-      // If service_name provided, try to match
-      if (params.service_name) {
-        const matches = matchServices(services.data, params.service_name);
-
-        if (matches.length === 1) {
-          // Single match — use it
-          resolvedServiceId = matches[0].id;
-        } else if (matches.length > 1) {
-          // Multiple matches — ask user to choose
-          return {
-            content: [{
-              type: 'text',
-              text: `Multiple services match "${params.service_name}". Please choose one and call start_timer again with the service_id:\n\n${formatServicesList(matches)}`,
-            }],
-          };
-        } else {
-          // No match — show all
-          return {
-            content: [{
-              type: 'text',
-              text: `No service found matching "${params.service_name}". Available services (open budgets):\n\n${formatServicesList(services.data)}\n\nPlease call start_timer again with the correct service_id.`,
-            }],
-          };
-        }
-      } else {
-        // No service_name, no service_id, no time_entry_id — show all
-        return {
-          content: [{
-            type: 'text',
-            text: `Please specify a service. Available services (open budgets):\n\n${formatServicesList(services.data)}\n\nCall start_timer again with service_name or service_id.`,
-          }],
-        };
-      }
+      return {
+        content: [{
+          type: 'text',
+          text: `Please choose a service and call start_timer again with the service_id:\n\n${formatServicesList(services.data)}`,
+        }],
+      };
     }
 
     const timerData: ProductiveTimerCreate = {
@@ -272,17 +221,13 @@ export const getTimerDefinition = {
 
 export const startTimerDefinition = {
   name: 'start_timer',
-  description: 'Start a new timer for time tracking. IMPORTANT: Do NOT guess service names or IDs. If the user does not explicitly name a service from Productive.io, call this tool WITHOUT service_name or service_id to get the list of available services, then present the list to the user and let them choose. Only use service_name if the user explicitly mentioned a specific service name. A work description (note) is always required.',
+  description: 'Start a new timer for time tracking. If no service_id is provided, returns a list of available services with open budgets for the user to choose from. A work description (note) is always required.',
   inputSchema: {
     type: 'object',
     properties: {
-      service_name: {
-        type: 'string',
-        description: 'Name (or part of name) of the service to track time against. The tool will fuzzy-match against available services with open budgets.',
-      },
       service_id: {
         type: 'string',
-        description: 'Direct service ID (optional, use service_name instead if you do not know the ID).',
+        description: 'Service ID to track time against. If not provided, a list of available services will be returned.',
       },
       time_entry_id: {
         type: 'string',
