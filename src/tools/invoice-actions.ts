@@ -1,0 +1,313 @@
+import { z } from 'zod';
+import { ProductiveAPIClient } from '../api/client.js';
+import { ProductivePaymentCreate } from '../api/types.js';
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+
+// ─── finalize_invoice ────────────────────────────────────────────────────────
+
+const finalizeInvoiceSchema = z.object({
+  invoice_id: z.string().min(1),
+  confirm: z.boolean().optional(),
+});
+
+/**
+ * Finalize an invoice (irreversible action).
+ *
+ * Requires explicit confirmation before executing because finalizing cannot be undone.
+ *
+ * @param client - Productive API client
+ * @param args - Tool arguments matching finalizeInvoiceSchema
+ * @returns MCP content response
+ */
+export async function finalizeInvoiceTool(
+  client: ProductiveAPIClient,
+  args: unknown,
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = finalizeInvoiceSchema.parse(args);
+
+    if (!params.confirm) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `⚠️  Finalizing invoice ${params.invoice_id} is IRREVERSIBLE.\n\nOnce finalized, the invoice cannot be edited or deleted. Call this tool again with confirm: true to proceed.`,
+          },
+        ],
+      };
+    }
+
+    const response = await client.finalizeInvoice(params.invoice_id);
+    const invoice = response.data;
+    const attrs = invoice.attributes;
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: [
+            `Invoice finalized!`,
+            `Number: ${attrs.number ?? 'N/A'}`,
+            `Total: ${attrs.amount_with_tax ?? 'N/A'}`,
+            ``,
+            `Next steps: Use export_invoice to generate a PDF, or mark_invoice_paid once payment is received.`,
+          ].join('\n'),
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${error.errors.map((e) => e.message).join(', ')}`,
+      );
+    }
+    throw new McpError(
+      ErrorCode.InternalError,
+      error instanceof Error ? error.message : 'Unknown error',
+    );
+  }
+}
+
+export const finalizeInvoiceDefinition = {
+  name: 'finalize_invoice',
+  description:
+    'Finalize an invoice, making it ready to send to the client. This action is IRREVERSIBLE — the invoice can no longer be edited after finalization. Requires confirm: true.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      invoice_id: {
+        type: 'string',
+        description: 'ID of the invoice to finalize',
+      },
+      confirm: {
+        type: 'boolean',
+        description: 'Must be true to execute the irreversible finalization',
+      },
+    },
+    required: ['invoice_id'],
+  },
+};
+
+// ─── export_invoice ──────────────────────────────────────────────────────────
+
+const exportInvoiceSchema = z.object({
+  invoice_id: z.string().min(1),
+});
+
+/**
+ * Export an invoice as a PDF.
+ *
+ * Triggers PDF generation and returns the download URL when available.
+ *
+ * @param client - Productive API client
+ * @param args - Tool arguments matching exportInvoiceSchema
+ * @returns MCP content response with PDF URL
+ */
+export async function exportInvoiceTool(
+  client: ProductiveAPIClient,
+  args: unknown,
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = exportInvoiceSchema.parse(args);
+    const response = await client.exportInvoice(params.invoice_id);
+    const attrs = response.data.attributes;
+
+    if (attrs.export_invoice_url) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `Invoice export ready!`,
+              ``,
+              `PDF URL: ${attrs.export_invoice_url}`,
+              ``,
+              `The link is time-limited. Download the PDF promptly.`,
+            ].join('\n'),
+          },
+        ],
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: [
+            `Export triggered for invoice ${params.invoice_id}.`,
+            ``,
+            `The PDF is being generated. Use get_invoice to check the export_invoice_url attribute once it becomes available.`,
+          ].join('\n'),
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${error.errors.map((e) => e.message).join(', ')}`,
+      );
+    }
+    throw new McpError(
+      ErrorCode.InternalError,
+      error instanceof Error ? error.message : 'Unknown error',
+    );
+  }
+}
+
+export const exportInvoiceDefinition = {
+  name: 'export_invoice',
+  description:
+    'Export an invoice as a PDF. Returns a download URL for the generated PDF file. If the URL is not immediately available, use get_invoice to check later.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      invoice_id: {
+        type: 'string',
+        description: 'ID of the invoice to export',
+      },
+    },
+    required: ['invoice_id'],
+  },
+};
+
+// ─── mark_invoice_paid ───────────────────────────────────────────────────────
+
+const markInvoicePaidSchema = z.object({
+  invoice_id: z.string().min(1),
+  paid_on: z.string().optional(),
+  note: z.string().optional(),
+  confirm: z.boolean().optional(),
+});
+
+/**
+ * Record a payment against an invoice, marking it as paid.
+ *
+ * Fetches the invoice first to calculate the remaining amount. Requires
+ * explicit confirmation before creating the payment record.
+ *
+ * @param client - Productive API client
+ * @param args - Tool arguments matching markInvoicePaidSchema
+ * @returns MCP content response
+ */
+export async function markInvoicePaidTool(
+  client: ProductiveAPIClient,
+  args: unknown,
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = markInvoicePaidSchema.parse(args);
+
+    const invoiceResponse = await client.getInvoice(params.invoice_id);
+    const attrs = invoiceResponse.data.attributes;
+
+    const amountWithTax = parseFloat(attrs.amount_with_tax ?? '0');
+    const amountPaid = parseFloat(attrs.amount_paid ?? '0');
+    const remaining = amountWithTax - amountPaid;
+
+    if (remaining <= 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Invoice ${params.invoice_id} is already fully paid (total: ${attrs.amount_with_tax ?? '0'}, paid: ${attrs.amount_paid ?? '0'}).`,
+          },
+        ],
+      };
+    }
+
+    const paidOn = params.paid_on ?? new Date().toISOString().slice(0, 10);
+
+    if (!params.confirm) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `Payment preview for invoice ${params.invoice_id}:`,
+              `  Will pay: ${remaining.toFixed(2)} (of total ${amountWithTax.toFixed(2)})`,
+              `  Date: ${paidOn}`,
+              params.note ? `  Note: ${params.note}` : null,
+              ``,
+              `Call again with confirm: true to record the payment.`,
+            ]
+              .filter(Boolean)
+              .join('\n'),
+          },
+        ],
+      };
+    }
+
+    const paymentData: ProductivePaymentCreate = {
+      data: {
+        type: 'payments',
+        attributes: {
+          amount: remaining.toFixed(2),
+          paid_on: paidOn,
+          ...(params.note !== undefined && { note: params.note }),
+        },
+        relationships: {
+          invoice: { data: { id: params.invoice_id, type: 'invoices' } },
+        },
+      },
+    };
+
+    await client.createPayment(paymentData);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: [
+            `Payment recorded successfully!`,
+            `  Invoice: ${params.invoice_id}`,
+            `  Amount paid: ${remaining.toFixed(2)}`,
+            `  Date: ${paidOn}`,
+            params.note ? `  Note: ${params.note}` : null,
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${error.errors.map((e) => e.message).join(', ')}`,
+      );
+    }
+    throw new McpError(
+      ErrorCode.InternalError,
+      error instanceof Error ? error.message : 'Unknown error',
+    );
+  }
+}
+
+export const markInvoicePaidDefinition = {
+  name: 'mark_invoice_paid',
+  description:
+    'Record a payment for an invoice. Fetches the current invoice to calculate the remaining balance and creates a payment record. Requires confirm: true to execute.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      invoice_id: {
+        type: 'string',
+        description: 'ID of the invoice to mark as paid',
+      },
+      paid_on: {
+        type: 'string',
+        description: 'Payment date in YYYY-MM-DD format (defaults to today)',
+      },
+      note: {
+        type: 'string',
+        description: 'Optional note to attach to the payment record',
+      },
+      confirm: {
+        type: 'boolean',
+        description: 'Must be true to record the payment',
+      },
+    },
+    required: ['invoice_id'],
+  },
+};
