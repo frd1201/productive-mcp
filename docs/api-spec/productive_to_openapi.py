@@ -367,6 +367,66 @@ def dump_yaml(spec: dict) -> str:
     return yaml.dump(spec, allow_unicode=True, sort_keys=False, default_flow_style=False)
 
 
+# --- Resource splitting -------------------------------------------------------
+
+def split_by_tag(spec: dict, out_dir: Path) -> dict[str, int]:
+    """Split spec into per-resource YAML files. Returns {slug: operation_count}."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    by_tag: dict[str, dict] = {}
+    for path, methods in spec["paths"].items():
+        for method, op in methods.items():
+            tag = op.get("tags", ["_other"])[0]
+            by_tag.setdefault(tag, {}).setdefault(path, {})[method] = op
+
+    stats = {}
+    for tag, paths in sorted(by_tag.items()):
+        slug = tag.lower().replace(" ", "_").replace("-", "_")
+        resource_spec = {
+            "openapi": "3.0.3",
+            "info": {"title": f"Productive.io API – {tag}", "version": spec["info"]["version"]},
+            "paths": paths,
+        }
+        (out_dir / f"{slug}.yaml").write_text(
+            yaml.dump(resource_spec, allow_unicode=True, sort_keys=False, default_flow_style=False),
+            encoding="utf-8",
+        )
+        stats[slug] = sum(len(v) for v in paths.values())
+
+    return stats
+
+
+def write_index(spec: dict, tag_stats: dict[str, int], index_path: Path) -> None:
+    """Write a compact resource index (METHOD /path per operation, no schemas)."""
+    total_ops = sum(tag_stats.values())
+    lines = [
+        f"# Productive.io API – Resource Index",
+        f"# Read this first, then read resources/{{slug}}.yaml for details.",
+        f"#",
+        f"# {len(tag_stats)} resources, {total_ops} operations",
+        "",
+    ]
+
+    # Group paths by tag for the index
+    by_tag: dict[str, list[tuple[str, str]]] = {}
+    for path, methods in spec["paths"].items():
+        for method, op in methods.items():
+            tag = op.get("tags", ["_other"])[0]
+            slug = tag.lower().replace(" ", "_").replace("-", "_")
+            by_tag.setdefault(slug, []).append((method.upper(), path))
+
+    for slug in sorted(by_tag.keys()):
+        ops = sorted(by_tag[slug], key=lambda x: (x[1], x[0]))
+        lines.append(f"{slug}:")
+        lines.append(f"  file: {slug}.yaml")
+        lines.append(f"  operations:")
+        for method, path in ops:
+            lines.append(f"    - {method} {path}")
+        lines.append("")
+
+    index_path.write_text("\n".join(lines), encoding="utf-8")
+
+
 # --- Changelog ----------------------------------------------------------------
 
 def load_previous_spec(path: Path) -> dict | None:
@@ -547,6 +607,12 @@ def main():
     total = sum(len(v) for v in spec["paths"].values())
     print(f"\nDone: {out_path}", file=sys.stderr)
     print(f"  Paths: {len(spec['paths'])}  |  Operations: {total}", file=sys.stderr)
+
+    # Split into per-resource files
+    resources_dir = out_path.parent / "resources"
+    tag_stats = split_by_tag(spec, resources_dir)
+    write_index(spec, tag_stats, resources_dir / "_index.yaml")
+    print(f"  Resources: {len(tag_stats)} files in {resources_dir}", file=sys.stderr)
 
     # Generate and write changelog
     stats = {"paths": len(spec["paths"]), "operations": total}

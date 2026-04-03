@@ -74,7 +74,8 @@ Operatoren: `eq`, `not_eq`, `contains`, `not_contain`, `gt`, `gt_eq`, `lt`, `lt_
 | `companies` | `/api/v2/companies` | |
 | `workflow_statuses` | `/api/v2/workflow_statuses` | Filter: `workflow_id` |
 
-## Vollständige Spec
+## Spec lesen
 
-Die vollständige maschinenlesbare Spec liegt nach dem Generieren in:
-`docs/api-spec/productive-openapi.yaml`
+1. **Index lesen:** `docs/api-spec/resources/_index.yaml` — Überblick aller Resources + Endpoints
+2. **Detail lesen:** `docs/api-spec/resources/{resource}.yaml` — vollständige Spec einer Resource
+3. **Vollständige Spec:** `docs/api-spec/productive-openapi.yaml` — nur für Codegen, NICHT direkt lesen

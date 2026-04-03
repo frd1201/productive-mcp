@@ -26,7 +26,9 @@ python productive_to_openapi.py --changelog ./CHANGELOG.md
 
 | Datei | Beschreibung |
 |-------|-------------|
-| `productive-openapi.yaml` | Generierte OpenAPI 3.0 Spec |
+| `productive-openapi.yaml` | Vollständige OpenAPI 3.0 Spec (für Codegen) |
+| `resources/_index.yaml` | Kompakter Index aller Resources + Endpoints |
+| `resources/{slug}.yaml` | Einzelne Resource-Spec (zum gezielten Lesen) |
 | `CHANGELOG.md` | Changelog: neue/entfernte Endpoints, geänderte Parameter/Schemas |
 
 ## Verwendung in Claude Code
