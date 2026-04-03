@@ -89,6 +89,30 @@ import {
   generateQuickTimesheetPrompt,
   quickTimesheetPromptDefinition,
 } from './prompts/timesheet.js';
+import {
+  listDocumentTypesTool,
+  listDocumentTypesDefinition,
+  listTaxRatesTool,
+  listTaxRatesDefinition,
+} from './tools/invoice-lookups.js';
+import {
+  listInvoicesTool,
+  listInvoicesDefinition,
+  getInvoiceTool,
+  getInvoiceDefinition,
+  createInvoiceTool,
+  createInvoiceDefinition,
+  generateLineItemsTool,
+  generateLineItemsDefinition,
+} from './tools/invoices.js';
+import {
+  finalizeInvoiceTool,
+  finalizeInvoiceDefinition,
+  exportInvoiceTool,
+  exportInvoiceDefinition,
+  markInvoicePaidTool,
+  markInvoicePaidDefinition,
+} from './tools/invoice-actions.js';
 
 export async function createServer() {
   // Initialize API client and config early to check user context
@@ -150,6 +174,15 @@ export async function createServer() {
       moveTaskToListTool,
       addToBacklogTool,
       taskRepositionDefinition,
+      listDocumentTypesDefinition,
+      listTaxRatesDefinition,
+      listInvoicesDefinition,
+      getInvoiceDefinition,
+      createInvoiceDefinition,
+      generateLineItemsDefinition,
+      finalizeInvoiceDefinition,
+      exportInvoiceDefinition,
+      markInvoicePaidDefinition,
     ],
   }));
 
@@ -271,6 +304,33 @@ export async function createServer() {
           throw new Error('taskId is required for task repositioning');
         }
         return await taskRepositionTool(apiClient, args as z.infer<typeof taskRepositionSchema>);
+
+      case 'list_document_types':
+        return await listDocumentTypesTool(apiClient, args);
+
+      case 'list_tax_rates':
+        return await listTaxRatesTool(apiClient, args);
+
+      case 'list_invoices':
+        return await listInvoicesTool(apiClient, args);
+
+      case 'get_invoice':
+        return await getInvoiceTool(apiClient, args);
+
+      case 'create_invoice':
+        return await createInvoiceTool(apiClient, args);
+
+      case 'generate_line_items':
+        return await generateLineItemsTool(apiClient, args);
+
+      case 'finalize_invoice':
+        return await finalizeInvoiceTool(apiClient, args);
+
+      case 'export_invoice':
+        return await exportInvoiceTool(apiClient, args);
+
+      case 'mark_invoice_paid':
+        return await markInvoicePaidTool(apiClient, args);
 
       default:
         throw new Error(`Unknown tool: ${name}`);
