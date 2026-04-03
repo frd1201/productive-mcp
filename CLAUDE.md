@@ -62,6 +62,7 @@ Generated docs in `docs/api-spec/`:
 - `CHANGELOG.md` -- tracks API changes between scraper runs
 
 Regenerate: `cd docs/api-spec && python productive_to_openapi.py`
+Lint scraper: `pylint --rcfile=docs/api-spec/.pylintrc docs/api-spec/productive_to_openapi.py`
 
 ## Environment Variables
 

@@ -18,12 +18,13 @@ import sys
 import json
 import time
 import argparse
-from datetime import date
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import requests
+from datetime import date
 from pathlib import Path
-from bs4 import BeautifulSoup, Tag
+
+import requests
 import yaml
+from bs4 import BeautifulSoup, Tag
 
 BASE_URL    = "https://developer.productive.io"
 API_BASE    = "https://api.productive.io/api/v2"
@@ -90,11 +91,16 @@ def extract_json_schema(json_str: str) -> dict:
 
 def type_hint_to_schema(hint: str) -> dict:
     t = hint.lower()
-    if "array"    in t: return {"type": "array", "items": {"type": "string"}}
-    if "datetime" in t: return {"type": "string", "format": "date-time"}
-    if "date"     in t: return {"type": "string", "format": "date"}
-    if "bool"     in t: return {"type": "boolean"}
-    if "integer"  in t: return {"type": "integer"}
+    if "array" in t:
+        return {"type": "array", "items": {"type": "string"}}
+    if "datetime" in t:
+        return {"type": "string", "format": "date-time"}
+    if "date" in t:
+        return {"type": "string", "format": "date"}
+    if "bool" in t:
+        return {"type": "boolean"}
+    if "integer" in t:
+        return {"type": "integer"}
     return {"type": "string"}
 
 
@@ -126,7 +132,10 @@ def get_all_slugs() -> list[str]:
             "working_with_attachments", "working_with_custom_fields"}
     slugs, seen = [], set()
     for a in soup.find_all("a", href=True):
-        m = re.match(r"([\w_-]+)\.html", a["href"])
+        href = a.get("href", "")
+        if isinstance(href, list):
+            href = href[0] if href else ""
+        m = re.match(r"([\w_-]+)\.html", href)
         if m:
             s = m.group(1)
             if s not in skip and s not in seen:
@@ -207,7 +216,8 @@ def parse_resource_page(slug: str) -> list[dict]:
             continue
         seen.add(key)
 
-        summary = re.sub(r"\[(?:GET|POST|PATCH|PUT|DELETE)\]|/api/v2/[^\s]+|`[^`]*`", "", text).strip(" -[]")
+        strip_pattern = r"\[(?:GET|POST|PATCH|PUT|DELETE)\]|/api/v2/[^\s]+|`[^`]*`"
+        summary = re.sub(strip_pattern, "", text).strip(" -[]")
 
         path_params = infer_path_params(path)
         params      = list(path_params)
@@ -402,9 +412,9 @@ def write_index(spec: dict, tag_stats: dict[str, int], index_path: Path) -> None
     """Write a compact resource index (METHOD /path per operation, no schemas)."""
     total_ops = sum(tag_stats.values())
     lines = [
-        f"# Productive.io API – Resource Index",
-        f"# Read this first, then read resources/{{slug}}.yaml for details.",
-        f"#",
+        "# Productive.io API – Resource Index",
+        "# Read this first, then read resources/{slug}.yaml for details.",
+        "#",
         f"# {len(tag_stats)} resources, {total_ops} operations",
         "",
     ]
@@ -421,7 +431,7 @@ def write_index(spec: dict, tag_stats: dict[str, int], index_path: Path) -> None
         ops = sorted(by_tag[slug], key=lambda x: (x[1], x[0]))
         lines.append(f"{slug}:")
         lines.append(f"  file: {slug}.yaml")
-        lines.append(f"  operations:")
+        lines.append("  operations:")
         for method, path in ops:
             lines.append(f"    - {method} {path}")
         lines.append("")
