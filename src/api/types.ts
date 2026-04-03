@@ -611,3 +611,118 @@ export interface TaskReposition {
   move_after_id?: string; // Move task after specified task ID
   placement?: number; // Legacy parameter, not recommended
 }
+
+export interface ProductiveDocumentType {
+  id: string;
+  type: 'document_types';
+  attributes: {
+    name: string;
+    status?: string;
+    created_at: string;
+    updated_at: string;
+    [key: string]: any;
+  };
+}
+
+export interface ProductiveTaxRate {
+  id: string;
+  type: 'tax_rates';
+  attributes: {
+    name: string;
+    tax: string;
+    status?: string;
+    created_at: string;
+    updated_at: string;
+    [key: string]: any;
+  };
+}
+
+export interface ProductiveInvoice {
+  id: string;
+  type: 'invoices';
+  attributes: {
+    number?: string;
+    subject?: string;
+    invoiced_on?: string;
+    pay_on?: string;
+    delivery_on?: string;
+    paid_on?: string;
+    finalized_at?: string;
+    currency?: string;
+    amount?: string;
+    amount_with_tax?: string;
+    amount_paid?: string;
+    amount_unpaid?: string;
+    amount_tax?: string;
+    invoice_state?: number;
+    invoice_status?: number;
+    invoice_type_id?: number;
+    payment_status?: number;
+    note?: string;
+    footer?: string;
+    payment_terms?: number;
+    export_invoice_url?: string;
+    exported?: boolean;
+    created_at: string;
+    updated_at: string;
+    [key: string]: any;
+  };
+  relationships?: {
+    company?: { data: { id: string; type: 'companies' } };
+    document_type?: { data: { id: string; type: 'document_types' } };
+    [key: string]: any;
+  };
+}
+
+export interface ProductiveInvoiceCreate {
+  data: {
+    type: 'invoices';
+    attributes: {
+      invoiced_on: string;
+      currency: string;
+      pay_on?: string;
+      delivery_on?: string;
+      subject?: string;
+      note?: string;
+      footer?: string;
+      payment_terms?: number;
+    };
+    relationships: {
+      company: { data: { id: string; type: 'companies' } };
+      document_type: { data: { id: string; type: 'document_types' } };
+      subsidiary?: { data: { id: string; type: 'subsidiaries' } };
+    };
+  };
+}
+
+export interface ProductiveLineItemGenerate {
+  data: {
+    type: 'line_items';
+    attributes: {
+      invoicing_method: string;
+      display_format: string;
+      date_from?: string;
+      date_to?: string;
+      invoicing_by?: string;
+    };
+    relationships: {
+      invoice: { data: { id: string; type: 'invoices' } };
+      deals: { data: Array<{ id: string; type: 'deals' }> };
+      tax_rate: { data: { id: string; type: 'tax_rates' } };
+    };
+  };
+}
+
+export interface ProductivePaymentCreate {
+  data: {
+    type: 'payments';
+    attributes: {
+      amount: string;
+      paid_on: string;
+      note?: string;
+    };
+    relationships: {
+      invoice: { data: { id: string; type: 'invoices' } };
+    };
+  };
+}
