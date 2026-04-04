@@ -964,11 +964,12 @@ export class ProductiveAPIClient {
 
   async listCompanyBudgets(params: {
     company_id: string;
+    status?: number;
     limit?: number;
   }): Promise<ProductiveResponse<ProductiveDeal>> {
     const queryParams = new URLSearchParams();
     queryParams.append('filter[type]', '2');
-    queryParams.append('filter[status]', '1');
+    if (params.status) queryParams.append('filter[status]', params.status.toString());
     queryParams.append('filter[company_id]', params.company_id);
     queryParams.append('include', 'project');
     if (params.limit) queryParams.append('page[size]', params.limit.toString());

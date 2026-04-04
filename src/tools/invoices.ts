@@ -175,6 +175,11 @@ export const listInvoicesDefinition = {
 
 const listCompanyBudgetsSchema = z.object({
   company_id: z.string().describe('Company ID (use list_companies to find)'),
+  include_closed: z
+    .boolean()
+    .default(false)
+    .optional()
+    .describe('Include closed budgets (default: false, only open)'),
   limit: z.number().min(1).max(200).default(50).optional(),
 });
 
@@ -186,6 +191,7 @@ export async function listCompanyBudgetsTool(
     const params = listCompanyBudgetsSchema.parse(args || {});
     const response = await client.listCompanyBudgets({
       company_id: params.company_id,
+      status: params.include_closed ? undefined : 1,
       limit: params.limit,
     });
 
@@ -229,7 +235,7 @@ export async function listCompanyBudgetsTool(
 export const listCompanyBudgetsDefinition = {
   name: 'list_company_budgets',
   description:
-    'List budgets for a company. Use list_companies to get company_id. Returns budget IDs needed for generate_line_items.',
+    'List budgets for a company. Shows only open budgets by default. Use list_companies to get company_id. Returns budget IDs needed for generate_line_items.',
   inputSchema: {
     type: 'object',
     required: ['company_id'],
@@ -237,6 +243,10 @@ export const listCompanyBudgetsDefinition = {
       company_id: {
         type: 'string',
         description: 'Company ID (use list_companies)',
+      },
+      include_closed: {
+        type: 'boolean',
+        description: 'Include closed budgets (default: false)',
       },
       limit: {
         type: 'number',
