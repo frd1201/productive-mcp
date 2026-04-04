@@ -167,6 +167,7 @@ export const listInvoicesDefinition = {
       },
     },
   },
+  annotations: { readOnlyHint: true },
 };
 
 // ---------------------------------------------------------------------------
@@ -256,6 +257,7 @@ export const listCompanyBudgetsDefinition = {
       },
     },
   },
+  annotations: { readOnlyHint: true },
 };
 
 // ---------------------------------------------------------------------------
@@ -358,6 +360,7 @@ export const getInvoiceDefinition = {
       },
     },
   },
+  annotations: { readOnlyHint: true },
 };
 
 // ---------------------------------------------------------------------------

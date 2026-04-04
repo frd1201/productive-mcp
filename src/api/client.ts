@@ -976,6 +976,24 @@ export class ProductiveAPIClient {
     return this.makeRequest<ProductiveResponse<ProductiveDeal>>(`deals?${queryParams.toString()}`);
   }
 
+  async deleteInvoice(id: string): Promise<void> {
+    const url = `${this.config.PRODUCTIVE_API_BASE_URL}invoices/${id}`;
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    if (!response.ok) {
+      const errorData = (await response.json()) as ProductiveError;
+      const errorMessages = (errorData.errors ?? [])
+        .map((e) => {
+          const field = e.source?.pointer ? ` (${e.source.pointer})` : '';
+          return `${e.detail || e.title || 'Unknown error'}${field}`;
+        })
+        .join('; ');
+      throw new Error(errorMessages || `Delete failed with status ${response.status}`);
+    }
+  }
+
   async createPayment(data: ProductivePaymentCreate): Promise<ProductiveSingleResponse<unknown>> {
     return this.makeRequest<ProductiveSingleResponse<unknown>>('payments', {
       method: 'POST',

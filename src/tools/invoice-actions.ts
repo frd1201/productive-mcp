@@ -160,6 +160,108 @@ export const getInvoicePdfUrlDefinition = {
     },
     required: ['invoice_id'],
   },
+  annotations: { readOnlyHint: true },
+};
+
+// ─── delete_invoice ──────────────────────────────────────────────────────────
+
+const deleteInvoiceSchema = z.object({
+  invoice_id: z.string().min(1),
+  confirm: z.boolean().optional(),
+});
+
+/**
+ * Delete a draft invoice.
+ *
+ * Fetches the invoice first to verify it is a draft (not yet finalized).
+ * Finalized invoices cannot be deleted. Requires explicit confirmation
+ * before executing because deletion is irreversible.
+ *
+ * @param client - Productive API client
+ * @param args - Tool arguments matching deleteInvoiceSchema
+ * @returns MCP content response
+ */
+export async function deleteInvoiceTool(
+  client: ProductiveAPIClient,
+  args: unknown,
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = deleteInvoiceSchema.parse(args);
+
+    const invoiceResponse = await client.getInvoice(params.invoice_id);
+    const attrs = invoiceResponse.data.attributes;
+
+    if (attrs.finalized_at) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Cannot delete finalized invoice ${params.invoice_id}. Only draft invoices can be deleted.`,
+          },
+        ],
+      };
+    }
+
+    if (!params.confirm) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `Delete preview for invoice ${params.invoice_id}:`,
+              `  Number: ${attrs.number ?? 'N/A'}`,
+              `  Status: Draft`,
+              ``,
+              `This action is IRREVERSIBLE. Call again with confirm: true to delete.`,
+            ].join('\n'),
+          },
+        ],
+      };
+    }
+
+    await client.deleteInvoice(params.invoice_id);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Invoice ${params.invoice_id} deleted.`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${error.errors.map((e) => e.message).join(', ')}`,
+      );
+    }
+    throw new McpError(
+      ErrorCode.InternalError,
+      error instanceof Error ? error.message : 'Unknown error',
+    );
+  }
+}
+
+export const deleteInvoiceDefinition = {
+  name: 'delete_invoice',
+  description:
+    'Delete a draft invoice. Only draft invoices (not yet finalized) can be deleted. This action is irreversible. Requires confirm: true to execute.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      invoice_id: {
+        type: 'string',
+        description: 'ID of the invoice to delete',
+      },
+      confirm: {
+        type: 'boolean',
+        description: 'Must be true to execute the irreversible deletion',
+      },
+    },
+    required: ['invoice_id'],
+  },
+  annotations: { destructiveHint: true },
 };
 
 // ─── mark_invoice_paid ───────────────────────────────────────────────────────
