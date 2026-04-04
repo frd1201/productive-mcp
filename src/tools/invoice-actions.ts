@@ -57,6 +57,7 @@ export async function finalizeInvoiceTool(
       ],
     };
   } catch (error) {
+    if (error instanceof McpError) throw error;
     if (error instanceof z.ZodError) {
       throw new McpError(
         ErrorCode.InvalidParams,
@@ -133,6 +134,7 @@ export async function getInvoicePdfUrlTool(
       ],
     };
   } catch (error) {
+    if (error instanceof McpError) throw error;
     if (error instanceof z.ZodError) {
       throw new McpError(
         ErrorCode.InvalidParams,
@@ -296,7 +298,9 @@ function buildTimesheetReportUrl(
 
   const dateFrom = params.date_from;
   const dateTo = params.date_to;
-  const startDateISO = `${dateFrom.slice(0, 7)}-${String(parseInt(dateFrom.slice(8), 10) - 1).padStart(2, '0')}T23:00:00.000Z`;
+  const startD = new Date(dateFrom);
+  startD.setUTCDate(startD.getUTCDate() - 1);
+  const startDateISO = `${startD.toISOString().slice(0, 10)}T23:00:00.000Z`;
   const endDateISO = `${dateTo}T22:00:00.000Z`;
 
   const exportData = {
@@ -531,6 +535,7 @@ export async function markInvoicePaidTool(
       ],
     };
   } catch (error) {
+    if (error instanceof McpError) throw error;
     if (error instanceof z.ZodError) {
       throw new McpError(
         ErrorCode.InvalidParams,

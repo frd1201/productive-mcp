@@ -298,8 +298,8 @@ export async function getInvoiceTool(
             .map((li) => {
               const desc = li.attributes.description ?? '—';
               const qty = li.attributes.quantity ?? '';
-              const unitPrice = formatAmount(li.attributes.unit_price as string);
-              const amount = formatAmount(li.attributes.amount as string);
+              const unitPrice = formatAmount(li.attributes.unit_price);
+              const amount = formatAmount(li.attributes.amount);
               return `  - ${desc} | qty: ${qty} | unit: ${unitPrice} | total: ${amount} (ID: ${li.id})`;
             })
             .join('\n')
