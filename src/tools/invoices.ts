@@ -8,6 +8,7 @@ import {
   ProductiveIncludedResource,
 } from '../api/types.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { resolveInvoiceDefaults } from './invoice-defaults.js';
 
 // ---------------------------------------------------------------------------
 // Helper functions
@@ -274,7 +275,7 @@ export const getInvoiceDefinition = {
 
 const createInvoiceSchema = z.object({
   company_id: z.string(),
-  document_type_id: z.string(),
+  document_type_id: z.string().optional().describe('Auto-resolved if omitted'),
   invoiced_on: z.string().optional(),
   currency: z.string().default('EUR').optional(),
   pay_on: z.string().optional(),
@@ -283,7 +284,7 @@ const createInvoiceSchema = z.object({
   note: z.string().optional(),
   footer: z.string().optional(),
   payment_terms: z.number().default(30).optional().describe('Payment terms in days (default: 30)'),
-  subsidiary_id: z.string().optional(),
+  subsidiary_id: z.string().optional().describe('Auto-resolved if omitted'),
 });
 
 /**
@@ -301,6 +302,22 @@ export async function createInvoiceTool(
     const params = createInvoiceSchema.parse(args || {});
     const today = new Date().toISOString().slice(0, 10);
 
+    // Auto-resolve defaults if not provided
+    const defaults =
+      !params.document_type_id || !params.subsidiary_id
+        ? await resolveInvoiceDefaults(client)
+        : null;
+
+    const documentTypeId = params.document_type_id ?? defaults?.document_type_id;
+    const subsidiaryId = params.subsidiary_id ?? defaults?.subsidiary_id;
+
+    if (!documentTypeId) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'Could not resolve document_type_id automatically. Pass it explicitly.',
+      );
+    }
+
     const data: ProductiveInvoiceCreate = {
       data: {
         type: 'invoices',
@@ -310,18 +327,18 @@ export async function createInvoiceTool(
           ...(params.pay_on !== undefined && { pay_on: params.pay_on }),
           delivery_on: params.delivery_on ?? getLastMonthRange().date_to,
           ...(params.subject !== undefined && { subject: params.subject }),
-          ...(params.note !== undefined && { note: params.note }),
-          ...(params.footer !== undefined && { footer: params.footer }),
+          note: params.note ?? defaults?.note_template ?? undefined,
+          footer: params.footer ?? defaults?.footer_template ?? undefined,
           payment_terms: params.payment_terms ?? 30,
         },
         relationships: {
           company: { data: { id: params.company_id, type: 'companies' } },
           document_type: {
-            data: { id: params.document_type_id, type: 'document_types' },
+            data: { id: documentTypeId, type: 'document_types' },
           },
-          ...(params.subsidiary_id !== undefined && {
+          ...(subsidiaryId && {
             subsidiary: {
-              data: { id: params.subsidiary_id, type: 'subsidiaries' },
+              data: { id: subsidiaryId, type: 'subsidiaries' },
             },
           }),
         },
@@ -357,10 +374,10 @@ export async function createInvoiceTool(
 export const createInvoiceDefinition = {
   name: 'create_invoice',
   description:
-    'Create a new draft invoice. Use list_companies for company_id, list_document_types for document_type_id. subsidiary_id may be required depending on the organization. After creation, use generate_line_items to add line items.',
+    'Create a new draft invoice. Only company_id is required — document_type_id, subsidiary_id, note, and footer are auto-resolved from organization defaults. Use list_companies for company_id. After creation, use generate_line_items to add line items.',
   inputSchema: {
     type: 'object',
-    required: ['company_id', 'document_type_id'],
+    required: ['company_id'],
     properties: {
       company_id: {
         type: 'string',
@@ -501,7 +518,7 @@ export const updateInvoiceDefinition = {
 const generateLineItemsSchema = z.object({
   invoice_id: z.string(),
   budget_ids: z.array(z.string()),
-  tax_rate_id: z.string(),
+  tax_rate_id: z.string().optional().describe('Auto-resolved if omitted'),
   display_format: z.string().default('{service}').optional(),
   date_from: z.string().optional(),
   date_to: z.string().optional(),
@@ -526,17 +543,29 @@ export async function generateLineItemsTool(
     const dateFrom = params.date_from ?? defaultRange.date_from;
     const dateTo = params.date_to ?? defaultRange.date_to;
 
+    // Auto-resolve tax_rate_id and locale if not provided
+    const defaults = !params.tax_rate_id ? await resolveInvoiceDefaults(client) : null;
+    const taxRateId = params.tax_rate_id ?? defaults?.tax_rate_id;
+    const locale = defaults?.locale ?? 'de';
+
+    if (!taxRateId) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        'Could not resolve tax_rate_id automatically. Pass it explicitly.',
+      );
+    }
+
     const data: ProductiveLineItemGenerate = {
       data: {
         invoice_id: parseInt(params.invoice_id, 10),
         budget_ids: params.budget_ids.map((id) => parseInt(id, 10)),
-        tax_rate_id: parseInt(params.tax_rate_id, 10),
+        tax_rate_id: parseInt(taxRateId, 10),
         invoicing_method: 'uninvoiced_time_and_expenses',
         display_format: params.display_format ?? '{service}',
         date_from: dateFrom,
         date_to: dateTo,
         invoicing_by: params.invoicing_by ?? 'service',
-        locale: 'de',
+        locale,
       },
     };
 
@@ -568,10 +597,10 @@ export async function generateLineItemsTool(
 export const generateLineItemsDefinition = {
   name: 'generate_line_items',
   description:
-    'Generate line items from uninvoiced time and expenses for a given period. Defaults to last month. Use list_project_deals for budget_ids, list_tax_rates for tax_rate_id. Always uses invoicing method "uninvoiced_time_and_expenses".',
+    'Generate line items from uninvoiced time and expenses for a given period. Defaults to last month. Use list_project_deals for budget_ids. tax_rate_id is auto-resolved if omitted.',
   inputSchema: {
     type: 'object',
-    required: ['invoice_id', 'budget_ids', 'tax_rate_id'],
+    required: ['invoice_id', 'budget_ids'],
     properties: {
       invoice_id: {
         type: 'string',

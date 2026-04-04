@@ -954,6 +954,10 @@ export class ProductiveAPIClient {
     );
   }
 
+  async listSubsidiaries(): Promise<ProductiveResponse<ProductiveIncludedResource>> {
+    return this.makeRequest<ProductiveResponse<ProductiveIncludedResource>>('subsidiaries');
+  }
+
   async createPayment(data: ProductivePaymentCreate): Promise<ProductiveSingleResponse<unknown>> {
     return this.makeRequest<ProductiveSingleResponse<unknown>>('payments', {
       method: 'POST',

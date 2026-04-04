@@ -90,12 +90,6 @@ import {
   quickTimesheetPromptDefinition,
 } from './prompts/timesheet.js';
 import {
-  listDocumentTypesTool,
-  listDocumentTypesDefinition,
-  listTaxRatesTool,
-  listTaxRatesDefinition,
-} from './tools/invoice-lookups.js';
-import {
   listInvoicesTool,
   listInvoicesDefinition,
   getInvoiceTool,
@@ -176,8 +170,6 @@ export async function createServer() {
       moveTaskToListTool,
       addToBacklogTool,
       taskRepositionDefinition,
-      listDocumentTypesDefinition,
-      listTaxRatesDefinition,
       listInvoicesDefinition,
       getInvoiceDefinition,
       createInvoiceDefinition,
@@ -307,12 +299,6 @@ export async function createServer() {
           throw new Error('taskId is required for task repositioning');
         }
         return await taskRepositionTool(apiClient, args as z.infer<typeof taskRepositionSchema>);
-
-      case 'list_document_types':
-        return await listDocumentTypesTool(apiClient, args);
-
-      case 'list_tax_rates':
-        return await listTaxRatesTool(apiClient, args);
 
       case 'list_invoices':
         return await listInvoicesTool(apiClient, args);
