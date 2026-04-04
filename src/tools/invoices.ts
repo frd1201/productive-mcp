@@ -666,6 +666,17 @@ export async function generateLineItemsTool(
     const response = await client.generateLineItems(data);
     const count = Array.isArray(response.data) ? response.data.length : 0;
 
+    if (count === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `0 line items generated — no uninvoiced time found for period ${dateFrom} to ${dateTo}.\nInvoice ${params.invoice_id} is empty (draft). You may want to delete it with delete_invoice.`,
+          },
+        ],
+      };
+    }
+
     return {
       content: [
         {
