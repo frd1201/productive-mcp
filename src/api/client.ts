@@ -64,9 +64,13 @@ export class ProductiveAPIClient {
 
       if (!response.ok) {
         const errorData = (await response.json()) as ProductiveError;
-        const errorMessage =
-          errorData.errors?.[0]?.detail || `API request failed with status ${response.status}`;
-        throw new Error(errorMessage);
+        const errorMessages = (errorData.errors ?? [])
+          .map((e) => {
+            const field = e.source?.pointer ? ` (${e.source.pointer})` : '';
+            return `${e.detail || e.title || 'Unknown error'}${field}`;
+          })
+          .join('; ');
+        throw new Error(errorMessages || `API request failed with status ${response.status}`);
       }
 
       return (await response.json()) as T;
