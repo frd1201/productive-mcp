@@ -149,7 +149,7 @@ export async function getInvoicePdfUrlTool(
 export const getInvoicePdfUrlDefinition = {
   name: 'get_invoice_pdf_url',
   description:
-    'Generate a PDF download URL for a finalized invoice. Returns a link to download the invoice as PDF. The invoice must be finalized first.',
+    'Generate a PDF download URL for an invoice. The URL must be opened in a browser where the user is logged into Productive — it does not work via API or curl. Use list_invoices or get_invoice to find the invoice_id.',
   inputSchema: {
     type: 'object',
     properties: {
