@@ -110,6 +110,8 @@ import {
 import {
   finalizeInvoiceTool,
   finalizeInvoiceDefinition,
+  getInvoicePdfUrlTool,
+  getInvoicePdfUrlDefinition,
   markInvoicePaidTool,
   markInvoicePaidDefinition,
 } from './tools/invoice-actions.js';
@@ -182,6 +184,7 @@ export async function createServer() {
       updateInvoiceDefinition,
       generateLineItemsDefinition,
       finalizeInvoiceDefinition,
+      getInvoicePdfUrlDefinition,
       markInvoicePaidDefinition,
     ],
   }));
@@ -328,6 +331,9 @@ export async function createServer() {
 
       case 'finalize_invoice':
         return await finalizeInvoiceTool(apiClient, args);
+
+      case 'get_invoice_pdf_url':
+        return await getInvoicePdfUrlTool(apiClient, args, config);
 
       case 'mark_invoice_paid':
         return await markInvoicePaidTool(apiClient, args);

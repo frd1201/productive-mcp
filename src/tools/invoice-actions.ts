@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ProductiveAPIClient } from '../api/client.js';
+import { Config } from '../config/index.js';
 import { ProductivePaymentCreate } from '../api/types.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
@@ -83,6 +84,78 @@ export const finalizeInvoiceDefinition = {
       confirm: {
         type: 'boolean',
         description: 'Must be true to execute the irreversible finalization',
+      },
+    },
+    required: ['invoice_id'],
+  },
+};
+
+// ─── get_invoice_pdf_url ─────────────────────────────────────────────────────
+
+const getInvoicePdfUrlSchema = z.object({
+  invoice_id: z.string().min(1),
+});
+
+function buildPdfUrl(invoiceId: string, invoiceNumber: string, config: Config): string {
+  const baseUrl = config.PRODUCTIVE_API_BASE_URL;
+  const isSandbox = baseUrl.includes('sandbox');
+  const exporterHost = isSandbox ? 'exporter-sandbox.productive.io' : 'exporter.productive.io';
+  const appHost = isSandbox ? 'sandbox.productive.io' : 'app.productive.io';
+  const orgId = config.PRODUCTIVE_ORG_ID;
+
+  const payload = {
+    name: `invoice_${invoiceNumber}`,
+    url: `https://${appHost}/${orgId}/export/document/invoice/${invoiceId}`,
+  };
+
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64');
+  return `https://${exporterHost}/export/document?payload=${encodeURIComponent(encoded)}&download=true`;
+}
+
+export async function getInvoicePdfUrlTool(
+  client: ProductiveAPIClient,
+  args: unknown,
+  config: Config,
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const { invoice_id } = getInvoicePdfUrlSchema.parse(args);
+    const response = await client.getInvoice(invoice_id);
+    const number = response.data.attributes.number ?? invoice_id;
+
+    const url = buildPdfUrl(invoice_id, number, config);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `PDF download URL for invoice #${number}:\n\n${url}`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${error.errors.map((e) => e.message).join(', ')}`,
+      );
+    }
+    throw new McpError(
+      ErrorCode.InternalError,
+      error instanceof Error ? error.message : 'Unknown error',
+    );
+  }
+}
+
+export const getInvoicePdfUrlDefinition = {
+  name: 'get_invoice_pdf_url',
+  description:
+    'Generate a PDF download URL for a finalized invoice. Returns a link to download the invoice as PDF. The invoice must be finalized first.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      invoice_id: {
+        type: 'string',
+        description: 'ID of the invoice',
       },
     },
     required: ['invoice_id'],
