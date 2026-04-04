@@ -265,6 +265,170 @@ export const deleteInvoiceDefinition = {
   annotations: { destructiveHint: true },
 };
 
+// ─── get_timesheet_report_url ────────────────────────────────────────────────
+
+const getTimesheetReportUrlSchema = z.object({
+  budget_id: z.string().describe('Budget/Deal ID'),
+  date_from: z.string().describe('Start date YYYY-MM-DD'),
+  date_to: z.string().describe('End date YYYY-MM-DD'),
+  columns: z.string().describe('Comma-separated columns, e.g. "day,person,note,billable-time"'),
+  name: z.string().describe('PDF filename, e.g. "Zeitnachweis_20260011"'),
+  title: z.string().describe('Title shown in PDF header'),
+  group_by: z
+    .string()
+    .default('time-entry')
+    .optional()
+    .describe('Grouping: "time-entry", "task", "person", "service"'),
+  sort_by: z.string().default('day').optional().describe('Sort field'),
+  orientation: z.string().default('portrait').optional().describe('"portrait" or "landscape"'),
+  page_size: z.string().default('A4').optional().describe('Page size'),
+});
+
+function buildTimesheetReportUrl(
+  params: z.infer<typeof getTimesheetReportUrlSchema>,
+  config: Config,
+): string {
+  const baseUrl = config.PRODUCTIVE_API_BASE_URL;
+  const isSandbox = baseUrl.includes('sandbox');
+  const exporterHost = isSandbox ? 'exporter-sandbox.productive.io' : 'exporter.productive.io';
+  const appHost = isSandbox ? 'sandbox.productive.io' : 'app.productive.io';
+  const orgId = config.PRODUCTIVE_ORG_ID;
+
+  const dateFrom = params.date_from;
+  const dateTo = params.date_to;
+  const startDateISO = `${dateFrom.slice(0, 7)}-${String(parseInt(dateFrom.slice(8), 10) - 1).padStart(2, '0')}T23:00:00.000Z`;
+  const endDateISO = `${dateTo}T22:00:00.000Z`;
+
+  const exportData = {
+    name: params.name,
+    format: '1',
+    pageSize: params.page_size ?? 'A4',
+    isAttachmentsEnabled: false,
+    orientation: params.orientation ?? 'portrait',
+    exportAs: 'manager',
+    isTimeExport: false,
+    isTimeEntryReportExport: true,
+    itemTypeColumnId: 'day',
+    extraApiParams: null,
+    apiFilterParams: {
+      '0': { date: { gtEq: dateFrom, ltEq: dateTo } },
+      '1': { budgetId: { eq: [params.budget_id] } },
+      '2': { 'service.billable': { eq: true } },
+      '3': { billableTime: { gt: 0 } },
+      '4': { billingTypeId: { eq: '2' } },
+      $op: 'and',
+    },
+    description: null,
+    dateFilters: [
+      {
+        label: 'Date',
+        value: [{ intervalId: '4', startDate: startDateISO, endDate: endDateISO }],
+      },
+    ],
+  };
+
+  const filterData = {
+    name: params.title,
+    default: false,
+    filterableCollection: 'time_entry_reports',
+    public: false,
+    columns: params.columns,
+    params: {
+      '0': {
+        '0': { date: { eq: '4' } },
+        '1': { budget_id: { eq: [params.budget_id] } },
+        '2': { 'service.billable': { eq: true } },
+        '3': { billable_time: { gt: 0 } },
+        '4': { billing_type_id: { eq: '2' } },
+        $op: 'and',
+      },
+      $op: 'and',
+    },
+    sortBy: params.sort_by ?? 'day',
+    groupBy: params.group_by ?? 'time-entry',
+    layoutId: 103,
+    chartTypeId: '3',
+    reportLayoutId: '2',
+    transposeBy: null,
+    report: true,
+    columnSettings: { person: { avatar: false } },
+    formulas: {},
+    exchangeCurrency: null,
+    exchangeDate: { intervalId: '12', startDate: null, endDate: null, date: null },
+    typeId: '2',
+  };
+
+  const exportB64 = Buffer.from(JSON.stringify(exportData)).toString('base64');
+  const filterB64 = Buffer.from(JSON.stringify(filterData)).toString('base64');
+
+  const innerUrl = `https://${appHost}/${orgId}/export/report/time_entry_reports?exportData=${exportB64}&filter=${filterB64}&download=true`;
+  const outerB64 = Buffer.from(innerUrl).toString('base64');
+
+  return `https://${exporterHost}/export?timezone=Bern&url=${encodeURIComponent(outerB64)}`;
+}
+
+export async function getTimesheetReportUrlTool(
+  _client: ProductiveAPIClient,
+  args: unknown,
+  config: Config,
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  try {
+    const params = getTimesheetReportUrlSchema.parse(args);
+    const url = buildTimesheetReportUrl(params, config);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Timesheet report URL for "${params.title}":\n\n${url}\n\nOpen in browser (must be logged into Productive).`,
+        },
+      ],
+    };
+  } catch (error) {
+    if (error instanceof McpError) throw error;
+    if (error instanceof z.ZodError) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid parameters: ${error.errors.map((e) => e.message).join(', ')}`,
+      );
+    }
+    throw new McpError(
+      ErrorCode.InternalError,
+      error instanceof Error ? error.message : 'Unknown error',
+    );
+  }
+}
+
+export const getTimesheetReportUrlDefinition = {
+  name: 'get_timesheet_report_url',
+  description:
+    'Generate a PDF timesheet report URL for a budget and date range. Columns, title, grouping, and sorting are all configurable. URL must be opened in a browser where the user is logged into Productive.',
+  inputSchema: {
+    type: 'object',
+    required: ['budget_id', 'date_from', 'date_to', 'columns', 'name', 'title'],
+    properties: {
+      budget_id: { type: 'string', description: 'Budget/Deal ID' },
+      date_from: { type: 'string', description: 'Start date YYYY-MM-DD' },
+      date_to: { type: 'string', description: 'End date YYYY-MM-DD' },
+      columns: {
+        type: 'string',
+        description:
+          'Comma-separated columns: day, person, note, billable-time, task, service, etc.',
+      },
+      name: { type: 'string', description: 'PDF filename (e.g. "Zeitnachweis_20260011")' },
+      title: { type: 'string', description: 'Title shown in PDF header' },
+      group_by: {
+        type: 'string',
+        description: 'Grouping: "time-entry" (default), "task", "person", "service"',
+      },
+      sort_by: { type: 'string', description: 'Sort field (default: "day")' },
+      orientation: { type: 'string', description: '"portrait" (default) or "landscape"' },
+      page_size: { type: 'string', description: 'Page size (default: "A4")' },
+    },
+  },
+  annotations: { readOnlyHint: true },
+};
+
 // ─── mark_invoice_paid ───────────────────────────────────────────────────────
 
 const markInvoicePaidSchema = z.object({

@@ -110,6 +110,8 @@ import {
   getInvoicePdfUrlDefinition,
   deleteInvoiceTool,
   deleteInvoiceDefinition,
+  getTimesheetReportUrlTool,
+  getTimesheetReportUrlDefinition,
   markInvoicePaidTool,
   markInvoicePaidDefinition,
 } from './tools/invoice-actions.js';
@@ -183,6 +185,7 @@ export async function createServer() {
       finalizeInvoiceDefinition,
       getInvoicePdfUrlDefinition,
       deleteInvoiceDefinition,
+      getTimesheetReportUrlDefinition,
       markInvoicePaidDefinition,
     ],
   }));
@@ -332,6 +335,9 @@ export async function createServer() {
 
       case 'delete_invoice':
         return await deleteInvoiceTool(apiClient, args);
+
+      case 'get_timesheet_report_url':
+        return await getTimesheetReportUrlTool(apiClient, args, config);
 
       case 'mark_invoice_paid':
         return await markInvoicePaidTool(apiClient, args);
