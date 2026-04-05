@@ -9,6 +9,10 @@ dist/
 .env
 .env.local
 .env.production
+.dev.vars
+
+# Cloudflare
+.wrangler/
 
 # Logs
 logs/
