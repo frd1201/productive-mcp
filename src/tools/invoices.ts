@@ -206,7 +206,14 @@ export async function listCompanyBudgetsTool(
           (r) => r.type === 'projects' && r.id === deal.relationships?.project?.data?.id,
         );
         const projectName = project ? (project.attributes.name as string) : '';
-        return `• ${deal.attributes.name} (ID: ${deal.id})${projectName ? `\n  Project: ${projectName}` : ''}`;
+        const po = deal.attributes.purchase_order_number as string | undefined;
+        const terms = deal.attributes.payment_terms as number | undefined;
+        const details: string[] = [];
+        if (projectName) details.push(`Project: ${projectName}`);
+        if (po) details.push(`PO: ${po}`);
+        if (terms !== undefined) details.push(`Payment Terms: ${terms} days`);
+        const detailStr = details.length > 0 ? `\n  ${details.join(' | ')}` : '';
+        return `• ${deal.attributes.name} (ID: ${deal.id})${detailStr}`;
       })
       .join('\n\n');
 
@@ -236,7 +243,7 @@ export async function listCompanyBudgetsTool(
 export const listCompanyBudgetsDefinition = {
   name: 'list_company_budgets',
   description:
-    'List budgets for a company. Shows only open budgets by default. Use list_companies to get company_id. Returns budget IDs needed for generate_line_items.',
+    'List budgets for a company. Shows only open budgets by default. Use list_companies to get company_id. Returns budget IDs needed for generate_line_items. Also returns PO number and payment terms per budget — pass these to create_invoice.',
   inputSchema: {
     type: 'object',
     required: ['company_id'],
@@ -372,12 +379,13 @@ const createInvoiceSchema = z.object({
   document_type_id: z.string().optional().describe('Auto-resolved if omitted'),
   invoiced_on: z.string().optional(),
   currency: z.string().default('EUR').optional(),
-  pay_on: z.string().optional(),
+  pay_on: z.string().optional().describe('Due date YYYY-MM-DD. Auto-calculated from invoiced_on + payment_terms if omitted'),
   delivery_on: z.string().optional(),
   subject: z.string().optional(),
   note: z.string().optional(),
   footer: z.string().optional(),
   payment_terms: z.number().default(30).optional().describe('Payment terms in days (default: 30)'),
+  purchase_order_number: z.string().optional().describe('PO number for the invoice'),
   subsidiary_id: z.string().optional().describe('Auto-resolved if omitted'),
 });
 
@@ -411,18 +419,32 @@ export async function createInvoiceTool(
       );
     }
 
+    const invoicedOn = params.invoiced_on ?? today;
+    const paymentTerms = params.payment_terms ?? 30;
+
+    // Auto-calculate pay_on from invoiced_on + payment_terms if not explicitly set
+    let payOn = params.pay_on;
+    if (!payOn) {
+      const d = new Date(invoicedOn);
+      d.setDate(d.getDate() + paymentTerms);
+      payOn = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
     const data: ProductiveInvoiceCreate = {
       data: {
         type: 'invoices',
         attributes: {
-          invoiced_on: params.invoiced_on ?? today,
+          invoiced_on: invoicedOn,
           currency: params.currency ?? 'EUR',
-          ...(params.pay_on !== undefined && { pay_on: params.pay_on }),
+          pay_on: payOn,
           delivery_on: params.delivery_on ?? getLastMonthRange().date_to,
           ...(params.subject !== undefined && { subject: params.subject }),
           note: params.note ?? defaults?.note_template ?? undefined,
           footer: params.footer ?? defaults?.footer_template ?? undefined,
-          payment_terms: params.payment_terms ?? 30,
+          payment_terms: paymentTerms,
+          ...(params.purchase_order_number !== undefined && {
+            purchase_order_number: params.purchase_order_number,
+          }),
         },
         relationships: {
           company: { data: { id: params.company_id, type: 'companies' } },
@@ -468,7 +490,7 @@ export async function createInvoiceTool(
 export const createInvoiceDefinition = {
   name: 'create_invoice',
   description:
-    'Create a new draft invoice. Only company_id is required — document_type_id, subsidiary_id, note, and footer are auto-resolved from organization defaults. Use list_companies for company_id. After creation, use generate_line_items to add line items.',
+    'Create a new draft invoice. Only company_id is required — document_type_id, subsidiary_id, note, and footer are auto-resolved. Use list_company_budgets first to get budget details including PO number and payment terms, then pass them here. pay_on is auto-calculated from invoiced_on + payment_terms. After creation, use generate_line_items to add line items.',
   inputSchema: {
     type: 'object',
     required: ['company_id'],
@@ -491,7 +513,7 @@ export const createInvoiceDefinition = {
       },
       pay_on: {
         type: 'string',
-        description: 'Payment due date (YYYY-MM-DD)',
+        description: 'Payment due date (YYYY-MM-DD). Auto-calculated from invoiced_on + payment_terms if omitted',
       },
       delivery_on: {
         type: 'string',
@@ -502,7 +524,11 @@ export const createInvoiceDefinition = {
       footer: { type: 'string', description: 'Invoice footer text' },
       payment_terms: {
         type: 'number',
-        description: 'Payment terms in days',
+        description: 'Payment terms in days (use value from list_company_budgets, default: 30)',
+      },
+      purchase_order_number: {
+        type: 'string',
+        description: 'PO number (use value from list_company_budgets)',
       },
       subsidiary_id: {
         type: 'string',
@@ -611,7 +637,17 @@ export const updateInvoiceDefinition = {
 
 const generateLineItemsSchema = z.object({
   invoice_id: z.string(),
-  budget_ids: z.array(z.string()),
+  budget_ids: z.preprocess((val) => {
+    if (typeof val === 'string') {
+      try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed.map(String) : [val];
+      } catch {
+        return [val];
+      }
+    }
+    return val;
+  }, z.array(z.string())),
   tax_rate_id: z.string().optional().describe('Auto-resolved if omitted'),
   display_format: z.string().default('{service}').optional(),
   date_from: z.string().optional(),

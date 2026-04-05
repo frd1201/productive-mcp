@@ -2,6 +2,12 @@ import { z } from 'zod';
 import { ProductiveAPIClient } from '../api/client.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
+/** Coerce "true"/"false" strings to booleans (some MCP clients send strings). */
+const coerceBoolean = z.preprocess(
+  (v) => (v === 'true' ? true : v === 'false' ? false : v),
+  z.boolean(),
+);
+
 // ---- Schemas ----
 
 const listTodosSchema = z.object({
@@ -25,7 +31,7 @@ const createTodoSchema = z.object({
 const updateTodoSchema = z.object({
   todo_id: z.string().min(1, 'Todo ID is required'),
   description: z.string().optional(),
-  closed: z.boolean().optional(),
+  closed: coerceBoolean.optional(),
   due_date: z.string().optional(),
 });
 

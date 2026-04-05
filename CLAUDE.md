@@ -109,4 +109,5 @@ All secrets are set via `wrangler secret put` (production) or `.dev.vars` (local
 ## Git Workflow
 
 - **Origin**: `MonadsAG/monads-mcp-productive` — all PRs go here
-- **Upstream**: `berwickgeek/productive-mcp` — fork source, do NOT create PRs here
+- **Upstream**: `berwickgeek/productive-mcp` — fork source, **NEVER create PRs here**
+- **CRITICAL**: Always use `--repo MonadsAG/monads-mcp-productive` when running `gh pr create`. The `gh` CLI defaults to the upstream fork (`berwickgeek/productive-mcp`) which is wrong.

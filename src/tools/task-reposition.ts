@@ -2,12 +2,18 @@ import { z } from 'zod';
 import type { ProductiveAPIClient } from '../api/client.js';
 import type { TaskReposition } from '../api/types.js';
 
+/** Coerce "true"/"false" strings to booleans (some MCP clients send strings). */
+const coerceBoolean = z.preprocess(
+  (v) => (v === 'true' ? true : v === 'false' ? false : v),
+  z.boolean(),
+);
+
 export const taskRepositionSchema = z.object({
   taskId: z.string().describe('The ID of the task to reposition'),
   move_before_id: z.string().optional().describe('Position the task before this task ID'),
   move_after_id: z.string().optional().describe('Position the task after this task ID'),
-  moveToTop: z.boolean().optional().describe('Move the task to the top of its list'),
-  moveToBottom: z.boolean().optional().describe('Move the task to the bottom of its list'),
+  moveToTop: coerceBoolean.optional().describe('Move the task to the top of its list'),
+  moveToBottom: coerceBoolean.optional().describe('Move the task to the bottom of its list'),
 });
 
 export const repositionTask = async (
