@@ -16,5 +16,13 @@
     "sourceMap": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "build"]
+  "exclude": [
+    "node_modules",
+    "build",
+    "src/worker.ts",
+    "src/auth/entra-handler.ts",
+    "src/auth/workers-oauth-utils.ts",
+    "src/auth/user-resolver.ts",
+    "src/config/worker-config.ts"
+  ]
 }

@@ -14,6 +14,9 @@
     "build": "tsc && chmod +x build/index.js",
     "dev": "tsc --watch",
     "start": "node build/index.js",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy",
+    "worker:types": "wrangler types",
     "prepublishOnly": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -28,27 +31,32 @@
     "project-management"
   ],
   "author": "jayat3dn",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/berwickgeek/productive-mcp.git"
+    "url": "git+https://github.com/MonadsAG/monads-mcp-productive.git"
   },
   "bugs": {
-    "url": "https://github.com/berwickgeek/productive-mcp/issues"
+    "url": "https://github.com/MonadsAG/monads-mcp-productive/issues"
   },
-  "homepage": "https://github.com/berwickgeek/productive-mcp#readme",
+  "homepage": "https://github.com/MonadsAG/monads-mcp-productive#readme",
   "engines": {
     "node": ">=18.0.0"
   },
   "description": "MCP server for Productive.io API integration",
   "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^0.4.0",
     "@modelcontextprotocol/sdk": "^1.13.2",
+    "agents": "^0.9.0",
     "dotenv": "^16.6.0",
-    "zod": "^3.25.67"
+    "hono": "^4.12.9",
+    "zod": "^3.25.67 || ^4.0.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260402.1",
     "@types/node": "^24.0.4",
     "prettier": "^3.8.1",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "wrangler": "^4.79.0"
   }
 }
