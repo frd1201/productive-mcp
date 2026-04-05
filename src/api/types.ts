@@ -881,6 +881,7 @@ export interface ProductiveInvoiceCreate {
       note?: string;
       footer?: string;
       payment_terms?: number;
+      purchase_order_number?: string;
     };
     relationships: {
       company: { data: { id: string; type: 'companies' } };

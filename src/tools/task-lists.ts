@@ -2,6 +2,12 @@ import { z } from 'zod';
 import { ProductiveAPIClient } from '../api/client.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
+/** Coerce "true"/"false" strings to booleans (some MCP clients send strings). */
+const coerceBoolean = z.preprocess(
+  (v) => (v === 'true' ? true : v === 'false' ? false : v),
+  z.boolean(),
+);
+
 const ListTaskListsSchema = z.object({
   board_id: z.string().optional().describe('Filter task lists by board ID'),
   limit: z.number().optional().default(30).describe('Number of task lists to return (max 200)'),
@@ -462,8 +468,8 @@ const CopyTaskListSchema = z.object({
   template_id: z.string().describe('The ID of the source task list to copy from'),
   project_id: z.string().describe('The ID of the project for the new task list'),
   board_id: z.string().describe('The ID of the board for the new task list'),
-  copy_open_tasks: z.boolean().optional().describe('Whether to copy open tasks from the template'),
-  copy_assignees: z.boolean().optional().describe('Whether to copy assignees from the template'),
+  copy_open_tasks: coerceBoolean.optional().describe('Whether to copy open tasks from the template'),
+  copy_assignees: coerceBoolean.optional().describe('Whether to copy assignees from the template'),
 });
 
 export async function copyTaskList(

@@ -3,6 +3,12 @@ import { ProductiveAPIClient } from '../api/client.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { ProductiveTimeEntryCreate } from '../api/types.js';
 
+/** Coerce "true"/"false" strings to booleans (some MCP clients send strings). */
+const coerceBoolean = z.preprocess(
+  (v) => (v === 'true' ? true : v === 'false' ? false : v),
+  z.boolean(),
+);
+
 // Helper function to format minutes into a human-readable display string
 export function formatMinutesDisplay(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
@@ -100,7 +106,7 @@ const createTimeEntrySchema = z.object({
       'REQUIRED: Detailed description of work performed - be specific about what was accomplished, including bullet points if multiple items',
     ),
   billable_time: z.string().optional(),
-  confirm: z.boolean().optional().default(false),
+  confirm: coerceBoolean.optional().default(false),
 });
 
 const listServicesSchema = z.object({

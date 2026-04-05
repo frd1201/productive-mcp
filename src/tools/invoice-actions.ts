@@ -4,11 +4,17 @@ import { Config } from '../config/index.js';
 import { ProductivePaymentCreate } from '../api/types.js';
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 
+/** Coerce "true"/"false" strings to booleans (some MCP clients send strings). */
+const coerceBoolean = z.preprocess(
+  (v) => (v === 'true' ? true : v === 'false' ? false : v),
+  z.boolean(),
+);
+
 // ─── finalize_invoice ────────────────────────────────────────────────────────
 
 const finalizeInvoiceSchema = z.object({
   invoice_id: z.string().min(1),
-  confirm: z.boolean().optional(),
+  confirm: coerceBoolean.optional(),
 });
 
 /**
@@ -169,7 +175,7 @@ export const getInvoicePdfUrlDefinition = {
 
 const deleteInvoiceSchema = z.object({
   invoice_id: z.string().min(1),
-  confirm: z.boolean().optional(),
+  confirm: coerceBoolean.optional(),
 });
 
 /**
@@ -439,7 +445,7 @@ const markInvoicePaidSchema = z.object({
   invoice_id: z.string().min(1),
   paid_on: z.string().optional(),
   note: z.string().optional(),
-  confirm: z.boolean().optional(),
+  confirm: coerceBoolean.optional(),
 });
 
 /**
