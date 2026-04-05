@@ -17,10 +17,15 @@ import { ProductiveAPIClient } from './api/client.js';
 import { resolveUserId } from './auth/user-resolver.js';
 import { EntraAuthHandler, type EntraProps } from './auth/entra-handler.js';
 import { registerToolsOnServer } from './tools/registry.js';
+import { LOGO_DATA_URI } from './auth/logo.js';
 
 export class ProductiveMCP extends McpAgent<WorkerEnv, Record<string, never>, EntraProps> {
   server = new Server(
-    { name: 'productive-mcp', version: '1.1.0' },
+    {
+      name: 'productive-mcp',
+      version: '1.1.0',
+      icons: [{ src: LOGO_DATA_URI, mimeType: 'image/svg+xml', sizes: ['any'] }],
+    },
     { capabilities: { tools: {} } },
   );
 
